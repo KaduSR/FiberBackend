@@ -10,14 +10,18 @@ Ele informa ao aplicativo onde encontrar todas as suas APIs (endpoints).
  * A URL completa do seu IXCSoft.
  * Eu já preenchi com o caminho padrão do webservice.
  */
-const IXC_API_URL = "https://centralfiber.online/webservice/v1";
-
-/**
- * O Token de API que você gerou no painel do IXC.
- * Siga as instruções no arquivo: docs/IXC_AUTH_GUIDE.md
- */
-const IXC_API_TOKEN =
-  "21:40112b3d6db245dbf0ac40379896f26c1c7efc100ed0a47fa45739e85c5971c1";
+export const IXC_CONFIG = {
+  BASE_URL: "https://centralfiber.online/webservice/v1",
+  TOKEN: "21:40112b3d6db245dbf0ac40379896f26c1c7efc100ed0a47fa45739e85c5971c1",
+  ENDPOINTS: {
+    CLIENTE: "/cliente",
+    CONTRATO: "/cliente_contrato",
+    FATURAS: "/fn_areacliente_faturas",
+    SUPORTE: "/su_oss_chamado",
+    FN_ARECEBER: "/fn_areceber", // Para listar faturas
+    GET_BOLETO: "/get_boleto", // Para buscar o boleto
+  },
+};
 
 // --- 2. Endpoints do seu Backend (Ponte de Serviços) ---
 // O seu aplicativo não fala direto com o GenieACS ou Downdetector.
@@ -26,25 +30,20 @@ const IXC_API_TOKEN =
 //
 // Você precisará hospedar esse 'server.js' em algum lugar
 // (ex: https://api.centralfiber.online) e colocar as URLs abaixo.
+const BACKEND_URL = "https://api.centralfiber.online";
 
-/**
- * URL do seu backend para a integração com GenieACS (ONT/Roteador).
- * Ex: 'https://api.centralfiber.online/api/ont'
- */
-const GENIE_ACS_API_URL = "https://URL_DO_SEU_BACKEND/api/ont";
+// Os outros serviços provavelmente esperam objetos similares
+export const GENIE_ACS_CONFIG = {
+  BASE_URL: `${BACKEND_URL}/api/ont`
+};
 
-/**
- * URL do seu backend para o serviço de "Downdetector" (Status dos Serviços).
- * Como você solicitou, isso vai apontar para sua própria API.
- * Ex: 'https://api.centralfiber.online/api/status'
- */
-const DOWNDETECTOR_API_URL = "https://URL_DO_SEU_BACKEND/api/status";
+export const DOWNDETECTOR_CONFIG = {
+  BASE_URL: `${BACKEND_URL}/api/status`
+};
 
-/**
- * URL do seu backend para o "FiberBot" (IA).
- * Ex: 'https://api.centralfiber.online/api/bot'
- */
-const FIBERBOT_API_URL = "https://URL_DO_SEU_BACKEND/api/bot";
+export const FIBERBOT_CONFIG = {
+  BASE_URL: `${BACKEND_URL}/api/bot`
+};
 
 // --- 3. Outros Serviços ---
 
@@ -54,14 +53,6 @@ const FIBERBOT_API_URL = "https://URL_DO_SEU_BACKEND/api/bot";
  * esta variável provavelmente NÃO será usada pelo 'services/speedTestService.ts',
  * mas a mantemos aqui para consistência do arquivo.
  */
-const SPEED_TEST_URL = ""; // Deixe em branco, pois não será usado
-
-// Exporta todas as variáveis para o restante do aplicativo usar
-export {
-  IXC_API_URL,
-  IXC_API_TOKEN,
-  GENIE_ACS_API_URL,
-  DOWNDETECTOR_API_URL,
-  FIBERBOT_API_URL,
-  SPEED_TEST_URL,
+export const SPEED_TEST_CONFIG = {
+  // Nenhuma configuração de URL necessária
 };

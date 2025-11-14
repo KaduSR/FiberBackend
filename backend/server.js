@@ -11,6 +11,7 @@ const rateLimit = require("express-rate-limit");
 const bodyParser = require("body-parser");
 const GenieACSService = require("./services/genieacs");
 const ontRoutes = require("./routes/ont");
+const speedTest = require('speedtest-net')
 
 // --- 1. IMPORTAÇÃO DO GEMINI ---
 // Adiciona a biblioteca do Google
@@ -23,6 +24,7 @@ const PORT = process.env.PORT || 3000;
 // Carrega a chave da API a partir das variáveis de ambiente (do Render)
 // Certifique-se de adicionar 'GEMINI_API_KEY' no painel do Render.
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+
 
 // Middleware de segurança
 app.use(helmet());

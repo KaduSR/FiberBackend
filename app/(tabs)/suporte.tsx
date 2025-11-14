@@ -67,15 +67,15 @@ export default function SuporteScreen() {
 
   // Load customer profile on mount
   React.useEffect(() => {
-    if (user?.id) {
+    if (user?.id_cliente) {
       loadCustomerProfile();
     }
-  }, [user?.id]);
+  }, [user?.id_cliente]);
 
   const loadCustomerProfile = async () => {
-    if (!user?.id) return;
+    if (!user?.id_cliente) return;
     
-    const summary = await customerProfileService.getProfileSummary(user.id);
+    const summary = await customerProfileService.getProfileSummary(user.id_cliente);
     if (summary !== 'Cliente novo') {
       const welcomeMessage: Message = {
         id: messages.length + 1,
@@ -128,7 +128,7 @@ export default function SuporteScreen() {
   };
 
   const getBotResponse = async (userMessage: string): Promise<string> => {
-    if (!user?.id) {
+    if (!user?.id_cliente) {
       return 'Por favor, faça login para continuar.';
     }
 
@@ -136,7 +136,7 @@ export default function SuporteScreen() {
       setIsCheckingStatus(true);
 
       // Registrar interação
-      await customerProfileService.recordInteraction(user.id);
+      await customerProfileService.recordInteraction(user.id_cliente);
 
       // Context para IA
       const context = {
@@ -146,7 +146,7 @@ export default function SuporteScreen() {
 
       // Chamar serviço de IA
       const aiResponse = await aiService.generateResponse(
-        user.id,
+        user.id_cliente,
         userMessage,
         context
       );

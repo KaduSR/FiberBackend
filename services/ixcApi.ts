@@ -3,28 +3,18 @@ import type { IXCAPIError } from '@/types/ixc';
 
 class IXCApiClient {
   private baseUrl: string;
-  private token: string | null = null;
+  private adminToken: string; // Token de admin codificado em Base64
 
   constructor() {
     this.baseUrl = IXC_CONFIG.BASE_URL;
-  }
-
-  setToken(token: string) {
-    this.token = token;
-  }
-
-  clearToken() {
-    this.token = null;
+    // Codifica o token de admin em Base64
+    this.adminToken = `Basic ${btoa(IXC_CONFIG.TOKEN)}`;
   }
 
   getAuthHeader(): Record<string, string> {
-    if (!this.token) {
-      return {};
-    }
-    // Convert token to Base64 as required by IXC
-    const base64Token = btoa(this.token);
+    // Sempre retorna o token de admin
     return {
-      'Authorization': `Basic ${base64Token}`,
+      'Authorization': this.adminToken,
     };
   }
 
@@ -36,6 +26,35 @@ class IXCApiClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeader(),
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw this.handleError(response.status, errorData);
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Erro desconhecido ao comunicar com o servidor');
+    }
+  }
+
+  // Método para pesquisas/listagens que requerem o header 'ixcsoft: listar'
+  async postList<T>(endpoint: string, data: Record<string, unknown> = {}): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ixcsoft': 'listar', // Header especial para pesquisas
           ...this.getAuthHeader(),
         },
         body: JSON.stringify(data),
@@ -74,7 +93,7 @@ class IXCApiClient {
 
   async withRetry<T>(
     operation: () => Promise<T>,
-    attempts: number = IXC_CONFIG.RETRY_ATTEMPTS
+    attempts: number = 3
   ): Promise<T> {
     let lastError: Error | null = null;
 
@@ -84,7 +103,7 @@ class IXCApiClient {
       } catch (error) {
         lastError = error as Error;
         if (i < attempts - 1) {
-          await this.delay(IXC_CONFIG.RETRY_DELAY * (i + 1));
+          await this.delay(1000 * (i + 1)); // Delay de 1s, 2s, 3s...
         }
       }
     }

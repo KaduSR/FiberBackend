@@ -1,10 +1,10 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '@/services/authService';
-import type { IXCAuthResponse } from '@/types/ixc';
+import type { AuthUserData } from '@/types/ixc';
 
 interface AuthContextType {
-  user: IXCAuthResponse | null;
+  user: AuthUserData | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -17,7 +17,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const AUTH_STORAGE_KEY = '@fibernet:auth';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<IXCAuthResponse | null>(null);
+  const [user, setUser] = useState<AuthUserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -28,13 +28,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
-        const userData: IXCAuthResponse = JSON.parse(stored);
+        const userData: AuthUserData = JSON.parse(stored);
         setUser(userData);
-        // Restore token in API client
-        if (userData.token) {
-          const { ixcApi } = await import('@/services/ixcApi');
-          ixcApi.setToken(userData.token);
-        }
+        // Não há mais token de sessão para restaurar
       }
     } catch (error) {
       console.error('Error loading stored auth:', error);
@@ -45,9 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      // Use mock login for development
-      // Replace with authService.login() in production
-      const response = await authService.mockLogin(email, password);
+      // Usa o authService.login() com a nova implementação
+      const response = await authService.login({ login: email, senha: password });
       
       setUser(response);
       await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(response));

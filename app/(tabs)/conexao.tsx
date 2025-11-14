@@ -47,7 +47,7 @@ export default function ConexaoScreen() {
   const loadDevices = async () => {
     try {
       setIsLoadingDevices(true);
-      const devicesData = await ontDevicesService.getConnectedDevices(user?.contractId || '');
+      const devicesData = await ontDevicesService.getConnectedDevices(user?.id_contrato || '');
       setDevices(devicesData);
     } catch (error) {
       console.error('Error loading devices:', error);
@@ -58,7 +58,7 @@ export default function ConexaoScreen() {
 
   const loadONTInfo = async () => {
     try {
-      const info = await ontDevicesService.getONTInfo(user?.contractId || '');
+      const info = await ontDevicesService.getONTInfo(user?.id_contrato || '');
       setONTInfo(info);
     } catch (error) {
       console.error('Error loading ONT info:', error);
@@ -105,7 +105,7 @@ export default function ConexaoScreen() {
       `Deseja bloquear "${device.name}"?`,
       async () => {
         const success = await ontDevicesService.toggleDeviceBlock(
-          user?.contractId || '',
+          user?.id_contrato || '',
           device.macAddress,
           true
         );
@@ -132,7 +132,7 @@ export default function ConexaoScreen() {
       'Reiniciar ONT',
       'Deseja reiniciar sua ONT? A conexão ficará indisponível por alguns minutos.',
       async () => {
-        const success = await ontDevicesService.rebootONT(user?.contractId || '');
+        const success = await ontDevicesService.rebootONT(user?.id_contrato || '');
         if (success) {
           showCustomAlert('Reiniciando', 'Sua ONT está sendo reiniciada. Aguarde alguns minutos.');
         }
