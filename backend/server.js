@@ -11,7 +11,7 @@ const rateLimit = require("express-rate-limit");
 const bodyParser = require("body-parser");
 const GenieACSService = require("./services/genieacs");
 const ontRoutes = require("./routes/ont");
-const speedTest = require('speedtest-net')
+const speedTest = require("speedtest-net");
 
 // --- 1. IMPORTAÇÃO DO GEMINI ---
 // Adiciona a biblioteca do Google
@@ -23,6 +23,7 @@ const jwt = require("jsonwebtoken");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.set("trust proxy", 1);
 
 // --- 2. INICIALIZAÇÃO DO GEMINI ---
 // Carrega a chave da API a partir das variáveis de ambiente (do Render)
@@ -31,7 +32,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 // --- 3. CONFIGURAÇÃO IXC E JWT ---
 // Variáveis de Ambiente (Adicione estas ao Render)
-const IXC_API_URL = process.env.IXC_API_URL || "https://centralfiber.online/webservice/v1";
+const IXC_API_URL =
+  process.env.IXC_API_URL || "https://centralfiber.online/webservice/v1";
 const IXC_ADMIN_TOKEN = process.env.IXC_ADMIN_TOKEN; // O seu "ID:TOKEN" do IXC
 const JWT_SECRET = process.env.JWT_SECRET; // Um segredo forte que VOCÊ cria (ex: "meu-segredo-de-32-bits")
 
@@ -41,14 +43,16 @@ const ixcApi = axios.create({
   headers: {
     "Content-Type": "application/json",
     // O Token de Admin é o padrão para TODAS as requisições do backend
-    "Authorization": `Basic ${Buffer.from(IXC_ADMIN_TOKEN || "").toString("base64")}`
+    Authorization: `Basic ${Buffer.from(IXC_ADMIN_TOKEN || "").toString(
+      "base64"
+    )}`,
   },
   timeout: 10000,
 });
 
 // Função de Helper (para chamadas 'listar')
 const ixcPostList = async (endpoint, data) => {
-  const config = { headers: { "ixcsoft": "listar" } };
+  const config = { headers: { ixcsoft: "listar" } };
   const response = await ixcApi.post(endpoint, data, config);
   return response.data;
 };
@@ -100,8 +104,8 @@ app.post("/api/auth/login", async (req, res, next) => {
 
   try {
     // --- PASSO 1: PESQUISAR O CLIENTE (A "Alternativa") ---
-    const campoBusca = login.includes("@") 
-      ? "cliente.hotsite_email" 
+    const campoBusca = login.includes("@")
+      ? "cliente.hotsite_email"
       : "cliente.cnpj_cpf";
 
     const searchBody = {
@@ -138,9 +142,14 @@ app.post("/api/auth/login", async (req, res, next) => {
       sortorder: "desc",
     };
 
-    const contratoResponse = await ixcPostList("/cliente_contrato", contratoBody);
+    const contratoResponse = await ixcPostList(
+      "/cliente_contrato",
+      contratoBody
+    );
     if (contratoResponse.total === 0 || !contratoResponse.registros[0]) {
-      return res.status(404).json({ error: "Cliente validado, mas nenhum contrato encontrado." });
+      return res
+        .status(404)
+        .json({ error: "Cliente validado, mas nenhum contrato encontrado." });
     }
     const contrato = contratoResponse.registros[0];
 
@@ -157,9 +166,8 @@ app.post("/api/auth/login", async (req, res, next) => {
     // --- PASSO 5: ENVIAR O TOKEN E OS DADOS PARA O APP ---
     res.json({
       token: token, // O NOSSO token de sessão
-      ...userData // Envia os dados do usuário para o app
+      ...userData, // Envia os dados do usuário para o app
     });
-
   } catch (error) {
     next(error);
   }
@@ -234,7 +242,6 @@ app.get("/api/invoices", authenticateJWT, async (req, res, next) => {
     }
 
     return res.json({ invoices: [] });
-
   } catch (error) {
     next(error);
   }
@@ -249,7 +256,7 @@ app.get("/api/boleto/:id", authenticateJWT, async (req, res, next) => {
       boletos: id,
       atualiza_boleto: "S",
       tipo_boleto: "arquivo",
-      base64: "S"
+      base64: "S",
     };
 
     const response = await ixcApi.post("/get_boleto", requestBody);
@@ -259,7 +266,6 @@ app.get("/api/boleto/:id", authenticateJWT, async (req, res, next) => {
     }
 
     return res.status(404).json({ error: "Boleto não encontrado." });
-
   } catch (error) {
     next(error);
   }
@@ -351,7 +357,9 @@ app.listen(PORT, () => {
   }        ║
 ║  Speedtest: Ativo em /api/speedtest                       ║
 ║  IXC API URL: ${IXC_API_URL}                    ║
-║  IXC Token: ${IXC_ADMIN_TOKEN ? "Carregado" : "NÃO CONFIGURADO!"}              ║
+║  IXC Token: ${
+    IXC_ADMIN_TOKEN ? "Carregado" : "NÃO CONFIGURADO!"
+  }              ║
 ║  JWT Secret: ${JWT_SECRET ? "Carregado" : "NÃO CONFIGURADO!"}               ║
 ║                                                            ║
 ║  Ready to manage ONTs! 📡                                  ║
