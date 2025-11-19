@@ -1,35 +1,24 @@
 {
   "name": "fibernet-backend",
-  "version": "1.0.0",
-  "description": "Backend API para integração FiberNet com GenieACS",
+  "version": "2.0.0",
+  "description": "Backend API para FiberNet (IXC, GenieACS, Speedtest, IA)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
-  "keywords": [
-    "fibernet",
-    "genieacs",
-    "tr-069",
-    "ont",
-    "isp"
-  ],
-  "author": "FiberNet Telecom",
-  "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "axios": "^1.13.2",
+    "axios": "^1.6.2",
     "body-parser": "^1.20.2",
-    "cheerio": "^1.1.2",
+    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "expo-server-sdk": "^4.0.0",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "node-cron": "^4.2.1",
-    "react-native-base64": "^0.2.1",
+    "node-cron": "^3.0.3",
     "speedtest-net": "^2.2.0"
   },
   "devDependencies": {
