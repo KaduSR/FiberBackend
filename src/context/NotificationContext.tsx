@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 interface NotificationContextType {
   permission: NotificationPermission;
   requestPermission: () => Promise<void>;
-  sendNotification: (title: string, body: string, url?: string) => void;
+  sendNotification: (title: string, body: string, url?: string, tag?: string) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -33,20 +33,20 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setPermission(result);
   };
 
-  const sendNotification = (title: string, body: string, url: string = '/') => {
+  const sendNotification = (title: string, body: string, url: string = '/', tag: string = 'fiber-update') => {
     if (permission === 'granted' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(registration => {
         registration.showNotification(title, {
           body,
           icon: 'https://cdn-icons-png.flaticon.com/512/93/93634.png',
           vibrate: [200, 100, 200],
-          tag: 'fiber-update',
+          tag: tag,
           data: { url }
         } as any);
       });
     } else if (permission === 'granted') {
        // Fallback for non-SW contexts
-       new Notification(title, { body });
+       new Notification(title, { body, tag });
     }
   };
 

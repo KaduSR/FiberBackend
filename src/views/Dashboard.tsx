@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Zap, Activity, MessageSquare, FileText, LogOut, Wifi, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -14,30 +13,83 @@ export const Dashboard: React.FC = () => {
   const [loadingOnt, setLoadingOnt] = useState(true);
 
   useEffect(() => {
-    const loadData = async () => {
+    const checkUpdates = async () => {
+       // 1. Check ONT (Conexão)
        try {
          const data = await dataService.getOntStatus();
          setOntStatus(data);
          
-         // Simulação de Notificação se a conexão estiver Offline
          if (data.status === 'Offline' && permission === 'granted') {
-            sendNotification('Alerta de Conexão', 'Sua fibra óptica parece estar offline. Toque para ver detalhes.', '/conexao');
+            const key = 'notified_offline';
+            if (!sessionStorage.getItem(key)) {
+                sendNotification('⚠️ Alerta de Conexão', 'Sua fibra óptica parece estar offline. Toque para ver detalhes.', '/conexao', 'alert-connection');
+                sessionStorage.setItem(key, 'true');
+            }
          }
        } catch (e) {
          setOntStatus({ status: 'Offline', signal: 'S/ Sinal' });
        } finally {
          setLoadingOnt(false);
        }
-    };
-    loadData();
-  }, [permission]); // Re-run if permission changes
 
-  // Simulação: Notificar sobre fatura ao carregar o dashboard (apenas demonstração)
+       // Se não tiver permissão, não faz verificações de push
+       if (permission !== 'granted') return;
+
+       // 2. Check Faturas (Invoices)
+       try {
+           const invoices = await dataService.getInvoices();
+           const openInvoices = invoices.filter(inv => inv.status === 'open' || inv.status === 'overdue');
+           
+           if (openInvoices.length > 0) {
+               const key = 'notified_invoices_' + openInvoices.length;
+               // Notifica apenas uma vez por sessão para não ser irritante
+               if (!sessionStorage.getItem(key)) {
+                   const isOverdue = openInvoices.some(i => i.status === 'overdue');
+                   const title = isOverdue ? '❗ Fatura Vencida' : '📄 Fatura Disponível';
+                   const body = isOverdue 
+                        ? 'Você possui faturas vencidas. Regularize para evitar bloqueios.'
+                        : `Você tem ${openInvoices.length} fatura(s) em aberto disponível(is).`;
+                   
+                   sendNotification(title, body, '/faturas', 'alert-invoice');
+                   sessionStorage.setItem(key, 'true');
+               }
+           }
+       } catch (e) {
+           console.error("Erro ao verificar faturas para notificação", e);
+       }
+
+       // 3. Check Notícias Urgentes (News)
+       try {
+           const news = await dataService.getNews();
+           if (news.length > 0) {
+               const item = news[0]; // Pega a mais recente
+               // Mesma lógica de relevância da tela News
+               const isUrgent = item.title.toLowerCase().includes('manutenção') || 
+                                item.title.toLowerCase().includes('aviso') || 
+                                item.title.toLowerCase().includes('instabilidade');
+               
+               if (isUrgent) {
+                   const key = 'notified_news_' + item.title;
+                   if (!sessionStorage.getItem(key)) {
+                       sendNotification('📢 Comunicado Importante', item.title, '/noticias', 'alert-news');
+                       sessionStorage.setItem(key, 'true');
+                   }
+               }
+           }
+       } catch (e) {
+           console.error("Erro ao verificar notícias", e);
+       }
+    };
+
+    checkUpdates();
+  }, [permission]); // Executa novamente se a permissão mudar (ex: usuário aceitou)
+
   const handleBellClick = async () => {
     if (permission !== 'granted') {
         await requestPermission();
     } else {
-        sendNotification('Fatura Disponível', 'Sua fatura de Julho já está disponível para pagamento.', '/faturas');
+        // Feedback visual se já estiver ativado
+        alert("Notificações estão ativadas! Você receberá alertas sobre faturas e manutenção.");
     }
   };
 
@@ -57,10 +109,11 @@ export const Dashboard: React.FC = () => {
             <button 
                 onClick={handleBellClick}
                 className="p-2 bg-zinc-900 border border-zinc-800 rounded-full hover:bg-zinc-800 relative transition-colors"
+                title={permission === 'granted' ? "Notificações Ativas" : "Ativar Notificações"}
             >
                 <Bell size={20} className={permission === 'granted' ? "text-[#0066FF]" : "text-zinc-400"} />
                 {permission !== 'granted' && (
-                    <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>
+                    <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border border-zinc-900"></span>
                 )}
             </button>
 
