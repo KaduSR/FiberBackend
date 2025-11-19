@@ -118,24 +118,50 @@ app.post("/api/auth/login-cpf", async (req, res, next) => {
   }
 });
 
-// Faturas (Protegido)
-const checkAuth = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Token necessário" });
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch (e) {
-    res.status(401).json({ error: "Token inválido" });
-  }
-};
+// Em: backend/server.js
 
-app.get("/api/invoices", checkAuth, async (req, res, next) => {
+// --- ROTA DE FATURAS CORRIGIDA (Com Mapeamento) ---
+app.get('/api/invoices', checkAuth, async (req, res, next) => {
   try {
-    const faturas = await ixcService.getFaturas(req.user.id_cliente);
-    res.json(faturas);
-  } catch (e) {
-    next(e);
+    console.log(`[Faturas] Buscando faturas para cliente ID: ${req.user.id_cliente}`);
+
+    // 1. Busca no IXC
+    const body = { 
+      qtype: 'fn_areceber.id_cliente', 
+      query: req.user.id_cliente, 
+      oper: '=', 
+      page: '1', 
+      rp: '20', // Últimas 20 faturas
+      sortname: 'fn_areceber.data_vencimento', 
+      sortorder: 'desc' 
+    };
+    
+    const data = await ixcPostList('/fn_areceber', body);
+
+    // 2. Verifica se voltou algo
+    if (!data.registros || data.registros.length === 0) {
+      console.log("[Faturas] Nenhuma fatura encontrada.");
+      return res.json([]);
+    }
+
+    // 3. MAPEAMENTO (A Correção Crítica)
+    // Transforma os nomes estranhos do IXC em nomes amigáveis para o Frontend
+    const faturasFormatadas = data.registros.map(fatura => ({
+      id: fatura.id,
+      valor: fatura.valor,            // IXC manda 'valor'
+      vencimento: fatura.data_vencimento, // IXC manda 'data_vencimento'
+      status: fatura.status,          // 'A' (Aberto) ou 'B' (Baixado/Pago)
+      status_desc: fatura.status === 'A' ? 'Em Aberto' : 'Pago',
+      linha_digitavel: fatura.linha_digitavel || '',
+      link_boleto: fatura.link_boleto || '' // Se houver
+    }));
+
+    console.log(`[Faturas] ${faturasFormatadas.length} faturas enviadas.`);
+    res.json(faturasFormatadas);
+
+  } catch (e) { 
+    console.error("[Faturas] Erro:", e.message);
+    next(e); 
   }
 });
 
