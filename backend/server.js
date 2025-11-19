@@ -1,7 +1,6 @@
 /*
  * ==========================================
- * FIBERNET BACKEND API (Versão Final Completa)
- * Integrações: IXC, GenieACS, Speedtest, GNews, Gemini, DownDetector
+ * FIBERNET BACKEND API (Versão Final - Correção CPF)
  * ==========================================
  */
 
@@ -13,36 +12,33 @@ const rateLimit = require("express-rate-limit");
 const bodyParser = require("body-parser");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
-const cheerio = require("cheerio"); // Para o DownDetector e Monitor
+const cheerio = require("cheerio");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Serviços Internos
 const ontRoutes = require("./routes/ont");
 const GenieACSService = require("./services/genieacs");
 
-// Importação Segura do Speedtest (Evita crash no deploy se falhar)
+// Importação Segura do Speedtest
 let speedTest;
 try {
   speedTest = require("speedtest-net");
 } catch (e) {
-  console.warn(
-    "⚠️ AVISO: Módulo 'speedtest-net' não carregado. A rota /api/speedtest falhará."
-  );
+  console.warn("⚠️ AVISO: Módulo 'speedtest-net' não carregado.");
 }
 
-// --- CONFIGURAÇÃO DO APP ---
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. Segurança e Proxy (Crítico para Render)
+// 1. Segurança
 app.set("trust proxy", 1);
-app.use(cors({ origin: "*" })); // Libera acesso para o App Expo
-// app.use(helmet()); // (Opcional: Descomente em produção se não bloquear scripts)
+app.use(cors({ origin: "*" }));
+// app.use(helmet());
 
-// 2. Rate Limiting (Proteção contra abuso)
+// 2. Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 300, // Limite relaxado para testes
+  windowMs: 15 * 60 * 1000,
+  max: 300,
   message: { error: "Muitas requisições. Tente novamente mais tarde." },
 });
 app.use("/api/", limiter);
@@ -51,24 +47,20 @@ app.use("/api/", limiter);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// --- VARIÁVEIS DE AMBIENTE ---
+// --- VARIÁVEIS ---
 const IXC_API_URL =
   process.env.IXC_API_URL || "https://centralfiber.online/webservice/v1";
-const IXC_ADMIN_TOKEN = process.env.IXC_ADMIN_TOKEN; // Formato ID:TOKEN
-const JWT_SECRET = process.env.JWT_SECRET || "fibernet_secret_key_change_me";
+const IXC_ADMIN_TOKEN = process.env.IXC_ADMIN_TOKEN;
+const JWT_SECRET = process.env.JWT_SECRET || "secret_key_default";
 const NEWS_API_KEY = process.env.NEWS_API_KEY;
 const GENIEACS_URL = process.env.GENIEACS_URL || "http://localhost:7557";
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Log de Inicialização
-console.log("--- INICIANDO SERVIDOR FIBERNET ---");
-console.log(`IXC Endpoint: ${IXC_API_URL}`);
-console.log(`IXC Token: ${IXC_ADMIN_TOKEN ? "Configurado ✅" : "AUSENTE ❌"}`);
+console.log("--- SERVIDOR INICIADO ---");
 
 // --- CLIENTES API ---
 
-// 1. Cliente IXC (Axios)
-// Usamos Buffer do Node.js para Base64 (Correção do erro 'base64 is not a function')
+// 1. IXC
 const tokenBase64 = IXC_ADMIN_TOKEN
   ? Buffer.from(IXC_ADMIN_TOKEN).toString("base64")
   : "";
@@ -82,7 +74,6 @@ const ixcApi = axios.create({
   timeout: 15000,
 });
 
-// Helper para chamadas de pesquisa no IXC (com header 'listar')
 const ixcPostList = async (endpoint, data) => {
   const config = { headers: { ixcsoft: "listar" } };
   try {
@@ -90,12 +81,11 @@ const ixcPostList = async (endpoint, data) => {
     return response.data;
   } catch (error) {
     console.error(`Erro IXC (${endpoint}):`, error.message);
-    // Retorna vazio para não quebrar a lógica
     return { total: 0, registros: [] };
   }
 };
 
-// 2. Cliente GenieACS
+// 2. GenieACS
 const genieacs = new GenieACSService(
   GENIEACS_URL,
   process.env.GENIEACS_USER,
@@ -103,55 +93,54 @@ const genieacs = new GenieACSService(
 );
 app.set("genieacs", genieacs);
 
-// 3. Cliente Gemini AI
+// 3. Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY || "");
 
-// --- MIDDLEWARES ---
+// --- FUNÇÃO AUXILIAR IMPORTANTE ---
+function formatarDocumento(valor) {
+  const apenasNumeros = valor.replace(/\D/g, "");
 
-// Verifica Token JWT
-const checkAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Acesso negado. Token necessário." });
+  // Se for CPF (11 dígitos) -> 000.000.000-00
+  if (apenasNumeros.length === 11) {
+    return apenasNumeros.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
   }
-  const token = authHeader.split(" ")[1];
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // Adiciona dados do user ao request
-    next();
-  } catch (error) {
-    return res.status(403).json({ error: "Token inválido ou expirado." });
+  // Se for CNPJ (14 dígitos) -> 00.000.000/0000-00 (caso tenha cliente PJ)
+  if (apenasNumeros.length === 14) {
+    return apenasNumeros.replace(
+      /(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,
+      "$1.$2.$3/$4-$5"
+    );
   }
-};
+
+  return valor; // Retorna original se não for nem CPF nem CNPJ
+}
 
 // ==========================================
-// ROTAS DA API
+// ROTAS
 // ==========================================
 
-// Health Check
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", uptime: process.uptime() });
-});
+app.get("/health", (req, res) => res.json({ status: "ok" }));
 
-// --- 1. AUTENTICAÇÃO ---
-
-// Login Padrão (E-mail/CPF + Senha)
+// --- LOGIN COM SENHA ---
 app.post("/api/auth/login", async (req, res, next) => {
   const { login, senha } = req.body;
   if (!login || !senha)
     return res.status(400).json({ error: "Preencha login e senha." });
 
   try {
-    // Limpa CPF se for numérico
-    const isCpf = /^\d+$/.test(login.replace(/\D/g, ""));
-    const loginLimpo = isCpf ? login.replace(/\D/g, "") : login;
+    // Verifica se é email ou CPF
+    const isEmail = login.includes("@");
 
-    const campoBusca = login.includes("@")
-      ? "cliente.hotsite_email"
-      : "cliente.cnpj_cpf";
+    // Se for CPF, formata. Se for email, usa como está.
+    const loginFormatado = isEmail ? login : formatarDocumento(login);
+
+    const campoBusca = isEmail ? "cliente.hotsite_email" : "cliente.cnpj_cpf";
+
+    console.log(`[Login] Buscando por: ${loginFormatado} (${campoBusca})`);
+
     const searchBody = {
       qtype: campoBusca,
-      query: loginLimpo,
+      query: loginFormatado, // AGORA VAI FORMATADO (123.456.789-00)
       oper: "=",
       page: "1",
       rp: "1",
@@ -167,12 +156,11 @@ app.post("/api/auth/login", async (req, res, next) => {
 
     const cliente = clienteRes.registros[0];
 
-    // Valida Senha (Comparação local)
     if (String(cliente.senha) !== String(senha)) {
       return res.status(401).json({ error: "Senha incorreta." });
     }
 
-    // Busca Contrato e Gera Token
+    // Gera Token
     const contratoData = await buscarContratoPrincipal(cliente.id);
     const responseData = gerarRespostaAuth(cliente, contratoData);
     res.json(responseData);
@@ -181,18 +169,20 @@ app.post("/api/auth/login", async (req, res, next) => {
   }
 });
 
-// Login CPF (Estilo WiFeed - Acesso Rápido)
+// --- LOGIN CPF (ACESSO RÁPIDO) ---
 app.post("/api/auth/login-cpf", async (req, res, next) => {
   const { cpf } = req.body;
   if (!cpf) return res.status(400).json({ error: "CPF obrigatório." });
 
   try {
-    const cpfLimpo = cpf.replace(/\D/g, ""); // Remove pontuação
+    // Força a formatação correta (Pontos e Traço)
+    const cpfFormatado = formatarDocumento(cpf);
 
-    // 1. Busca apenas por CPF
+    console.log(`[Login CPF] Buscando por: ${cpfFormatado}`);
+
     const searchBody = {
       qtype: "cliente.cnpj_cpf",
-      query: cpfLimpo,
+      query: cpfFormatado, // ENVIA 123.456.789-00
       oper: "=",
       page: "1",
       rp: "1",
@@ -208,14 +198,10 @@ app.post("/api/auth/login-cpf", async (req, res, next) => {
 
     const cliente = clienteRes.registros[0];
 
-    // 2. Validação opcional de status (Bloquear inativos)
     if (cliente.ativo === "N") {
-      return res
-        .status(403)
-        .json({ error: "Cadastro inativo. Contate o suporte." });
+      return res.status(403).json({ error: "Cadastro inativo." });
     }
 
-    // 3. Busca Contrato e Gera Token
     const contratoData = await buscarContratoPrincipal(cliente.id);
     const responseData = gerarRespostaAuth(cliente, contratoData);
     res.json(responseData);
@@ -224,110 +210,43 @@ app.post("/api/auth/login-cpf", async (req, res, next) => {
   }
 });
 
-// --- 2. FUNCIONALIDADES PÚBLICAS/MISTAS ---
+// --- OUTRAS ROTAS (GNews, Speedtest, Bot...) ---
 
-// Monitoramento de Instabilidades (Nova Rota para a aba Status)
-// Cache simples para não bloquear o DownDetector com muitas requisições
-let statusCache = { lastUpdate: 0, data: [] };
-
-app.get("/api/instabilities", async (req, res) => {
-  const now = Date.now();
-  // Cache de 10 minutos
-  if (now - statusCache.lastUpdate < 10 * 60 * 1000) {
-    return res.json(statusCache.data);
-  }
-
-  const servicesToCheck = [
-    "discord",
-    "netflix",
-    "youtube",
-    "instagram",
-    "facebook",
-    "whatsapp",
-    "tiktok",
-    "roblox",
-  ];
-  const unstableServices = [];
-
-  // Verifica em paralelo
-  await Promise.all(
-    servicesToCheck.map(async (service) => {
-      try {
-        const { data } = await axios.get(
-          `https://downdetector.com.br/fora-do-ar/${service}/`,
-          {
-            headers: { "User-Agent": "Mozilla/5.0" },
-            timeout: 5000,
-          }
-        );
-        const $ = cheerio.load(data);
-        const statusText = $(".entry-title").first().text().trim();
-
-        if (
-          statusText.toLowerCase().includes("problema") ||
-          statusText.toLowerCase().includes("falha")
-        ) {
-          unstableServices.push({
-            id: service,
-            name: service.charAt(0).toUpperCase() + service.slice(1),
-            status: statusText,
-          });
-        }
-      } catch (e) {}
-    })
-  );
-
-  statusCache = { lastUpdate: now, data: unstableServices };
-  res.json(unstableServices);
-});
-
-// Notícias (GNews)
-app.get("/api/news", async (req, res, next) => {
+app.get("/api/news", async (req, res) => {
   if (!NEWS_API_KEY) return res.json([]);
   try {
-    // Busca notícias específicas
-    const query =
-      "tecnologia OR jogos OR games OR 'fibra óptica' OR filmes OR series";
+    const query = "tecnologia OR 'fibra óptica' OR streaming";
     const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(
       query
     )}&lang=pt&apikey=${NEWS_API_KEY}`;
     const { data } = await axios.get(url);
     res.json(data.articles || []);
-  } catch (error) {
+  } catch (e) {
     res.json([]);
   }
 });
 
-// Speedtest (Servidor)
 app.get("/api/speedtest", async (req, res, next) => {
-  if (!speedTest)
-    return res.status(503).json({ error: "Módulo Speedtest indisponível." });
-
-  console.log("[Speedtest] Iniciando teste...");
+  if (!speedTest) return res.status(503).json({ error: "Indisponível." });
   try {
     const result = await speedTest({ acceptLicense: true, acceptGdpr: true });
     res.json({
-      download: (result.download.bandwidth / 125000).toFixed(2), // Mbps
-      upload: (result.upload.bandwidth / 125000).toFixed(2), // Mbps
+      download: (result.download.bandwidth / 125000).toFixed(2),
+      upload: (result.upload.bandwidth / 125000).toFixed(2),
       ping: result.ping.latency.toFixed(0),
       server: result.server.name,
       url: result.result.url,
     });
-  } catch (error) {
-    console.error("[Speedtest] Erro:", error.message);
-    res.status(500).json({ error: "Falha ao medir velocidade." });
+  } catch (e) {
+    res.status(500).json({ error: "Falha no teste." });
   }
 });
 
-// Chatbot (Gemini + DownDetector)
-app.post("/api/bot", async (req, res, next) => {
+app.post("/api/bot", async (req, res) => {
   try {
     const { message, history } = req.body;
-    if (!GEMINI_API_KEY) throw new Error("IA não configurada.");
-
-    // Verificação Rápida DownDetector
-    let contextInfo = "";
-    const servicosAlvo = [
+    let info = "";
+    const apps = [
       "discord",
       "netflix",
       "youtube",
@@ -335,50 +254,53 @@ app.post("/api/bot", async (req, res, next) => {
       "facebook",
       "whatsapp",
     ];
-    const servicoDetectado = servicosAlvo.find((s) =>
-      message.toLowerCase().includes(s)
-    );
+    const app = apps.find((s) => message.toLowerCase().includes(s));
 
-    if (servicoDetectado) {
+    if (app) {
       try {
         const { data } = await axios.get(
-          `https://downdetector.com.br/fora-do-ar/${servicoDetectado}/`
+          `https://downdetector.com.br/fora-do-ar/${app}/`
         );
         const $ = cheerio.load(data);
-        const statusText = $(".entry-title").first().text().trim();
-
-        if (statusText.toLowerCase().includes("problema")) {
-          contextInfo = `[ALERTA EXTERNO]: O DownDetector reporta problemas no ${servicoDetectado}. Avise que a falha não é na internet.`;
-        } else {
-          contextInfo = `[STATUS EXTERNO]: O DownDetector diz que o ${servicoDetectado} está normal. Sugira verificar o Wi-Fi.`;
-        }
+        const status = $(".entry-title").first().text().trim();
+        info = status.toLowerCase().includes("problema")
+          ? `ALERTA: O DownDetector reporta problemas no ${app}.`
+          : `STATUS: O DownDetector diz que o ${app} está normal.`;
       } catch (e) {}
     }
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const systemPrompt = `Você é o FiberBot, suporte da FiberNet. Contexto: ${contextInfo}. Responda de forma breve.`;
-
     const chat = model.startChat({
       history:
         history?.map((h) => ({
           role: h.role === "user" ? "user" : "model",
           parts: [{ text: h.content }],
         })) || [],
-      systemInstruction: systemPrompt,
     });
-
-    const result = await chat.sendMessage(message);
+    const result = await chat.sendMessage(
+      `Você é o suporte da FiberNet. ${info} ${message}`
+    );
     res.json({ reply: result.response.text() });
-  } catch (error) {
-    res.json({ reply: "Desculpe, estou com dificuldade de conexão." });
+  } catch (e) {
+    res.json({ reply: "Erro no bot." });
   }
 });
 
-// --- 3. DADOS PROTEGIDOS (Requerem Token) ---
+// Middleware de Autenticação
+const checkAuth = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Token necessário" });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (e) {
+    res.status(401).json({ error: "Token inválido" });
+  }
+};
 
-app.use(checkAuth); // Aplica proteção a tudo abaixo
+app.use(checkAuth);
 
-// Faturas (IXC)
+// Dados Protegidos
 app.get("/api/invoices", async (req, res, next) => {
   try {
     const body = {
@@ -397,7 +319,6 @@ app.get("/api/invoices", async (req, res, next) => {
   }
 });
 
-// Contratos (IXC)
 app.get("/api/contracts", async (req, res, next) => {
   try {
     const body = {
@@ -416,7 +337,6 @@ app.get("/api/contracts", async (req, res, next) => {
   }
 });
 
-// Boleto PDF (IXC)
 app.get("/api/boleto/:id", async (req, res, next) => {
   try {
     const body = {
@@ -432,11 +352,9 @@ app.get("/api/boleto/:id", async (req, res, next) => {
   }
 });
 
-// Status ONT (GenieACS)
 app.use("/api/ont", ontRoutes);
 
-// --- FUNÇÕES AUXILIARES ---
-
+// Auxiliares
 async function buscarContratoPrincipal(idCliente) {
   try {
     const body = {
@@ -453,7 +371,7 @@ async function buscarContratoPrincipal(idCliente) {
       ? res.registros[0]
       : { id: "0", status: "Desconhecido" };
   } catch (e) {
-    return { id: "0", status: "Erro na busca" };
+    return { id: "0", status: "Erro" };
   }
 }
 
@@ -463,21 +381,10 @@ function gerarRespostaAuth(cliente, contrato) {
     id_contrato: contrato.id,
     nome_cliente: cliente.razao,
     email: cliente.hotsite_email,
-    telefone: cliente.telefone_celular,
     status_contrato: contrato.status,
   };
   const token = jwt.sign(userData, JWT_SECRET, { expiresIn: "7d" });
   return { token, user: userData };
 }
-
-// --- ERROR HANDLING ---
-app.use((req, res) =>
-  res.status(404).json({ error: "Endpoint não encontrado" })
-);
-app.use((err, req, res, next) => {
-  console.error("Erro Servidor:", err.message);
-  const status = err.response?.status || 500;
-  res.status(status).json({ error: "Erro interno no servidor." });
-});
 
 app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
