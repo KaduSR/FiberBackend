@@ -1,204 +1,241 @@
 import React, { useEffect, useState } from 'react';
-import { Zap, Activity, MessageSquare, FileText, LogOut, Wifi, Bell } from 'lucide-react';
+import { 
+  Wifi, 
+  CreditCard, 
+  Zap, 
+  Activity, 
+  ArrowUpRight, 
+  FileText, 
+  ShieldCheck, 
+  Download, 
+  Clock,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useNotification } from '../context/NotificationContext';
 import { dataService } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export const Dashboard: React.FC = () => {
-  const { user, signOut } = useAuth();
-  const { permission, requestPermission, sendNotification } = useNotification();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [ontStatus, setOntStatus] = useState<any>(null);
-  const [loadingOnt, setLoadingOnt] = useState(true);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkUpdates = async () => {
-       // 1. Check ONT (Conexão)
-       try {
-         const data = await dataService.getOntStatus();
-         setOntStatus(data);
-         
-         if (data.status === 'Offline' && permission === 'granted') {
-            const key = 'notified_offline';
-            if (!sessionStorage.getItem(key)) {
-                sendNotification('⚠️ Alerta de Conexão', 'Sua fibra óptica parece estar offline. Toque para ver detalhes.', '/conexao', 'alert-connection');
-                sessionStorage.setItem(key, 'true');
-            }
-         }
-       } catch (e) {
-         setOntStatus({ status: 'Offline', signal: 'S/ Sinal' });
-       } finally {
-         setLoadingOnt(false);
-       }
-
-       // Se não tiver permissão, não faz verificações de push
-       if (permission !== 'granted') return;
-
-       // 2. Check Faturas (Invoices)
-       try {
-           const invoices = await dataService.getInvoices();
-           const openInvoices = invoices.filter(inv => inv.status === 'open' || inv.status === 'overdue');
-           
-           if (openInvoices.length > 0) {
-               const key = 'notified_invoices_' + openInvoices.length;
-               // Notifica apenas uma vez por sessão para não ser irritante
-               if (!sessionStorage.getItem(key)) {
-                   const isOverdue = openInvoices.some(i => i.status === 'overdue');
-                   const title = isOverdue ? '❗ Fatura Vencida' : '📄 Fatura Disponível';
-                   const body = isOverdue 
-                        ? 'Você possui faturas vencidas. Regularize para evitar bloqueios.'
-                        : `Você tem ${openInvoices.length} fatura(s) em aberto disponível(is).`;
-                   
-                   sendNotification(title, body, '/faturas', 'alert-invoice');
-                   sessionStorage.setItem(key, 'true');
-               }
-           }
-       } catch (e) {
-           console.error("Erro ao verificar faturas para notificação", e);
-       }
-
-       // 3. Check Notícias Urgentes (News)
-       try {
-           const news = await dataService.getNews();
-           if (news.length > 0) {
-               const item = news[0]; // Pega a mais recente
-               // Mesma lógica de relevância da tela News
-               const isUrgent = item.title.toLowerCase().includes('manutenção') || 
-                                item.title.toLowerCase().includes('aviso') || 
-                                item.title.toLowerCase().includes('instabilidade');
-               
-               if (isUrgent) {
-                   const key = 'notified_news_' + item.title;
-                   if (!sessionStorage.getItem(key)) {
-                       sendNotification('📢 Comunicado Importante', item.title, '/noticias', 'alert-news');
-                       sessionStorage.setItem(key, 'true');
-                   }
-               }
-           }
-       } catch (e) {
-           console.error("Erro ao verificar notícias", e);
-       }
+    const fetchData = async () => {
+      try {
+        const [ontData, invoicesData] = await Promise.all([
+          dataService.getOntStatus().catch(() => ({ status: 'Offline', signal: 'N/A' })),
+          dataService.getInvoices().catch(() => [])
+        ]);
+        setOntStatus(ontData);
+        setInvoices(invoicesData);
+      } finally {
+        setLoading(false);
+      }
     };
-
-    checkUpdates();
-  }, [permission]); // Executa novamente se a permissão mudar (ex: usuário aceitou)
-
-  const handleBellClick = async () => {
-    if (permission !== 'granted') {
-        await requestPermission();
-    } else {
-        // Feedback visual se já estiver ativado
-        alert("Notificações estão ativadas! Você receberá alertas sobre faturas e manutenção.");
-    }
-  };
+    fetchData();
+  }, []);
 
   const isOnline = ontStatus?.status === 'Online';
+  
+  // Logic for Financial Card
+  const openInvoices = invoices.filter(inv => inv.status === 'open' || inv.status === 'overdue');
+  const nextInvoice = openInvoices.length > 0 ? openInvoices[0] : null;
+  const financialStatus = nextInvoice ? (new Date(nextInvoice.dueDate) < new Date() ? 'Vencida' : 'Em Aberto') : 'Em Dia';
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pb-24 max-w-md mx-auto">
-       {/* Header */}
-       <div className="p-6 pt-8 flex justify-between items-center bg-zinc-900/50 backdrop-blur-md sticky top-0 z-10 border-b border-white/5">
-          <div>
-             <h1 className="text-2xl font-bold tracking-tight">Olá, {user?.nome_cliente?.split(' ')[0] || 'Cliente'}</h1>
-             <p className="text-zinc-400 text-xs font-medium mt-0.5">Plano: <span className="text-[#0066FF]">{user?.planName || 'Fibra 500MB'}</span></p>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            {/* Botão de Notificação */}
-            <button 
-                onClick={handleBellClick}
-                className="p-2 bg-zinc-900 border border-zinc-800 rounded-full hover:bg-zinc-800 relative transition-colors"
-                title={permission === 'granted' ? "Notificações Ativas" : "Ativar Notificações"}
-            >
-                <Bell size={20} className={permission === 'granted' ? "text-[#0066FF]" : "text-zinc-400"} />
-                {permission !== 'granted' && (
-                    <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse border border-zinc-900"></span>
-                )}
-            </button>
+    <div className="space-y-8 animate-fade-in">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Visão Geral</h1>
+          <p className="text-zinc-400 mt-1">Bem-vindo de volta, {user?.nome_cliente}</p>
+        </div>
+        <div className="flex items-center space-x-2 text-sm text-zinc-500 bg-zinc-900 px-4 py-2 rounded-full border border-zinc-800">
+          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+          <span>Sistemas Operacionais</span>
+        </div>
+      </div>
 
-            {/* Botão Sair */}
-            <button onClick={signOut} className="p-2 bg-zinc-900 border border-zinc-800 rounded-full hover:bg-red-900/20 hover:border-red-900/50 transition-colors group">
-                <LogOut size={20} className="text-zinc-400 group-hover:text-red-500" />
-            </button>
+      {/* Main Grid Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Card 1: Plano (Featured) */}
+        <div className="bg-gradient-to-br from-blue-600 to-blue-900 rounded-2xl p-6 text-white shadow-xl shadow-blue-900/20 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Zap size={100} />
           </div>
-       </div>
-
-       <div className="p-6 space-y-8">
-          {/* Status Card */}
-          <div className={`rounded-3xl p-6 relative overflow-hidden shadow-2xl border transition-all duration-500 ${
-              isOnline 
-              ? 'bg-gradient-to-br from-emerald-900 to-emerald-950 border-emerald-800/50 shadow-emerald-900/20' 
-              : 'bg-gradient-to-br from-red-900 to-red-950 border-red-800/50 shadow-red-900/20'
-          }`}>
-             <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/5 rounded-full blur-3xl"></div>
-             
-             <div className="flex justify-between items-start mb-8 relative z-10">
-                <div className="flex items-center space-x-3">
-                   <div className={`p-2.5 rounded-xl backdrop-blur-sm ${isOnline ? 'bg-emerald-500/20' : 'bg-red-500/20'}`}>
-                      <Wifi className={`w-6 h-6 ${isOnline ? 'text-emerald-400' : 'text-red-400'}`} />
-                   </div>
-                   <div>
-                       <p className="text-xs text-white/60 font-medium uppercase tracking-wider">Status da Rede</p>
-                       <span className={`font-bold text-lg ${isOnline ? 'text-emerald-100' : 'text-red-100'}`}>
-                         {loadingOnt ? 'Verificando...' : (ontStatus?.status || 'Desconhecido')}
-                       </span>
-                   </div>
+          <div className="relative z-10 h-full flex flex-col justify-between">
+             <div>
+               <div className="flex items-center space-x-2 mb-4">
+                 <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider">Plano Atual</span>
+               </div>
+               <h2 className="text-2xl font-bold mb-1">{user?.planName || 'Fiber Game 500MB'}</h2>
+               <p className="text-blue-100 text-sm opacity-90">Fibra Óptica Dedicada</p>
+             </div>
+             <div className="mt-6 pt-6 border-t border-white/10 flex items-center justify-between">
+                <div>
+                   <p className="text-xs text-blue-200 uppercase">Status</p>
+                   <p className="font-bold flex items-center gap-1"><CheckCircle2 size={14}/> Ativo</p>
                 </div>
-             </div>
-             
-             <div className="flex justify-between items-end relative z-10">
-                 <div>
-                    <p className="text-white/60 text-xs mb-1">Sinal Óptico (dBm)</p>
-                    <p className="text-3xl font-bold text-white">
-                        {loadingOnt ? '--' : (ontStatus?.signal || 'N/A')} 
-                    </p>
-                 </div>
-                 <div className="text-right">
-                    <div className={`h-2 w-24 rounded-full mb-2 ${isOnline ? 'bg-emerald-950' : 'bg-red-950'}`}>
-                        <div className={`h-full rounded-full ${isOnline ? 'bg-emerald-400 w-full' : 'bg-red-500 w-1/3'}`}></div>
-                    </div>
-                    <p className="text-xs text-white/50">{isOnline ? 'Sinal Estável' : 'Verifique os cabos'}</p>
-                 </div>
+                <button className="bg-white text-blue-900 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-50 transition-colors">
+                  Detalhes
+                </button>
              </div>
           </div>
+        </div>
 
-          {/* Grid de Ações */}
-          <div>
-             <h3 className="font-bold text-lg mb-4 text-zinc-100 flex items-center">
-                Acesso Rápido
-             </h3>
-             <div className="grid grid-cols-2 gap-4">
-                 <button onClick={() => navigate('/faturas')} className="bg-zinc-900 border border-zinc-800 hover:border-blue-500/50 hover:bg-zinc-800 p-5 rounded-2xl flex flex-col items-start justify-between gap-4 transition-all group h-32">
-                    <div className="p-3 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors text-blue-500">
-                      <FileText size={28} />
-                    </div>
-                    <span className="font-bold text-sm text-zinc-300 group-hover:text-white">Minhas Faturas</span>
-                 </button>
-                 
-                 <button onClick={() => navigate('/conexao')} className="bg-zinc-900 border border-zinc-800 hover:border-orange-500/50 hover:bg-zinc-800 p-5 rounded-2xl flex flex-col items-start justify-between gap-4 transition-all group h-32">
-                    <div className="p-3 bg-orange-500/10 rounded-xl group-hover:bg-orange-500/20 transition-colors text-orange-500">
-                      <Activity size={28} />
-                    </div>
-                    <span className="font-bold text-sm text-zinc-300 group-hover:text-white">Teste Velocidade</span>
-                 </button>
+        {/* Card 2: Conexão */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col justify-between group hover:border-zinc-700 transition-colors">
+           <div className="flex justify-between items-start">
+              <div className={`p-3 rounded-xl ${isOnline ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                 <Wifi size={24} />
+              </div>
+              <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${isOnline ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'}`}>
+                 {ontStatus?.status || 'Verificando...'}
+              </span>
+           </div>
+           <div>
+              <p className="text-zinc-500 text-sm font-medium mb-1">Sinal da Fibra</p>
+              <div className="flex items-end gap-2">
+                 <span className="text-3xl font-bold text-white">{ontStatus?.signal || '--'}</span>
+                 <span className="text-sm text-zinc-500 mb-1">dBm</span>
+              </div>
+              <div className="w-full bg-zinc-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                 <div className={`h-full rounded-full ${isOnline ? 'bg-emerald-500 w-[85%]' : 'bg-red-500 w-[10%]'}`}></div>
+              </div>
+           </div>
+        </div>
 
-                 <button onClick={() => navigate('/noticias')} className="bg-zinc-900 border border-zinc-800 hover:border-purple-500/50 hover:bg-zinc-800 p-5 rounded-2xl flex flex-col items-start justify-between gap-4 transition-all group h-32">
-                    <div className="p-3 bg-purple-500/10 rounded-xl group-hover:bg-purple-500/20 transition-colors text-purple-500">
-                      <Zap size={28} />
-                    </div>
-                    <span className="font-bold text-sm text-zinc-300 group-hover:text-white">Notícias</span>
-                 </button>
+        {/* Card 3: Financeiro */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col justify-between group hover:border-zinc-700 transition-colors">
+           <div className="flex justify-between items-start">
+              <div className="p-3 rounded-xl bg-purple-500/10 text-purple-500">
+                 <CreditCard size={24} />
+              </div>
+              <span className={`text-xs font-bold px-2 py-1 rounded uppercase ${financialStatus === 'Em Dia' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                 {financialStatus}
+              </span>
+           </div>
+           <div>
+              <p className="text-zinc-500 text-sm font-medium mb-1">Próxima Fatura</p>
+              {nextInvoice ? (
+                <>
+                   <div className="flex items-end gap-2">
+                      <span className="text-3xl font-bold text-white">R$ {nextInvoice.amount.toFixed(2)}</span>
+                   </div>
+                   <p className="text-xs text-zinc-400 mt-2 flex items-center gap-1">
+                      <Clock size={12} /> Vence em {new Date(nextInvoice.dueDate).toLocaleDateString('pt-BR')}
+                   </p>
+                </>
+              ) : (
+                <div className="flex flex-col justify-end h-16">
+                   <p className="text-lg font-bold text-white">Tudo pago! 🎉</p>
+                   <p className="text-xs text-zinc-500">Nenhuma pendência encontrada.</p>
+                </div>
+              )}
+           </div>
+        </div>
+      </div>
 
-                 <button onClick={() => navigate('/suporte')} className="bg-zinc-900 border border-zinc-800 hover:border-green-500/50 hover:bg-zinc-800 p-5 rounded-2xl flex flex-col items-start justify-between gap-4 transition-all group h-32">
-                    <div className="p-3 bg-green-500/10 rounded-xl group-hover:bg-green-500/20 transition-colors text-green-500">
-                      <MessageSquare size={28} />
-                    </div>
-                    <span className="font-bold text-sm text-zinc-300 group-hover:text-white">Suporte IA</span>
-                 </button>
-             </div>
-          </div>
-       </div>
+      {/* Quick Actions */}
+      <div>
+        <h3 className="text-lg font-bold text-white mb-4">Ações Rápidas</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+           <button onClick={() => navigate('/faturas')} className="bg-zinc-900 border border-zinc-800 hover:border-blue-500 p-4 rounded-xl flex items-center gap-3 transition-all group text-left">
+              <div className="bg-zinc-800 p-2 rounded-lg group-hover:bg-blue-500 group-hover:text-white transition-colors text-zinc-400">
+                 <FileText size={20} />
+              </div>
+              <div>
+                 <p className="font-bold text-sm text-zinc-200">2ª Via Fatura</p>
+                 <p className="text-[10px] text-zinc-500">Baixar ou Copiar</p>
+              </div>
+           </button>
+
+           <button onClick={() => navigate('/conexao')} className="bg-zinc-900 border border-zinc-800 hover:border-orange-500 p-4 rounded-xl flex items-center gap-3 transition-all group text-left">
+              <div className="bg-zinc-800 p-2 rounded-lg group-hover:bg-orange-500 group-hover:text-white transition-colors text-zinc-400">
+                 <Activity size={20} />
+              </div>
+              <div>
+                 <p className="font-bold text-sm text-zinc-200">Teste Velocidade</p>
+                 <p className="text-[10px] text-zinc-500">Diagnóstico</p>
+              </div>
+           </button>
+
+           <button className="bg-zinc-900 border border-zinc-800 hover:border-green-500 p-4 rounded-xl flex items-center gap-3 transition-all group text-left">
+              <div className="bg-zinc-800 p-2 rounded-lg group-hover:bg-green-500 group-hover:text-white transition-colors text-zinc-400">
+                 <ShieldCheck size={20} />
+              </div>
+              <div>
+                 <p className="font-bold text-sm text-zinc-200">Desbloqueio</p>
+                 <p className="text-[10px] text-zinc-500">Confiança (3 dias)</p>
+              </div>
+           </button>
+
+           <button onClick={() => navigate('/suporte')} className="bg-zinc-900 border border-zinc-800 hover:border-purple-500 p-4 rounded-xl flex items-center gap-3 transition-all group text-left">
+              <div className="bg-zinc-800 p-2 rounded-lg group-hover:bg-purple-500 group-hover:text-white transition-colors text-zinc-400">
+                 <Zap size={20} />
+              </div>
+              <div>
+                 <p className="font-bold text-sm text-zinc-200">Chamado Técnico</p>
+                 <p className="text-[10px] text-zinc-500">Falar com IA</p>
+              </div>
+           </button>
+        </div>
+      </div>
+
+      {/* Recent Invoices Table */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+         <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+            <h3 className="font-bold text-white">Histórico Recente</h3>
+            <button onClick={() => navigate('/faturas')} className="text-xs text-blue-500 hover:text-blue-400 font-bold flex items-center">
+               Ver todos <ArrowUpRight size={14} className="ml-1" />
+            </button>
+         </div>
+         <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+               <thead className="text-xs text-zinc-500 uppercase bg-zinc-950/50">
+                  <tr>
+                     <th className="px-6 py-4 font-medium">ID</th>
+                     <th className="px-6 py-4 font-medium">Vencimento</th>
+                     <th className="px-6 py-4 font-medium">Valor</th>
+                     <th className="px-6 py-4 font-medium">Status</th>
+                     <th className="px-6 py-4 font-medium text-right">Ação</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-zinc-800">
+                  {invoices.slice(0, 3).map((inv) => (
+                     <tr key={inv.id} className="hover:bg-zinc-800/50 transition-colors">
+                        <td className="px-6 py-4 text-zinc-300">#{inv.id}</td>
+                        <td className="px-6 py-4 text-zinc-300">{new Date(inv.dueDate).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-6 py-4 font-bold text-white">R$ {inv.amount.toFixed(2)}</td>
+                        <td className="px-6 py-4">
+                           <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
+                              inv.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' :
+                              inv.status === 'overdue' ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'
+                           }`}>
+                              {inv.status === 'paid' ? 'Pago' : inv.status === 'overdue' ? 'Vencido' : 'Aberto'}
+                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                           <button className="text-zinc-400 hover:text-blue-400 transition-colors">
+                              <Download size={16} />
+                           </button>
+                        </td>
+                     </tr>
+                  ))}
+                  {invoices.length === 0 && (
+                     <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-zinc-500">Nenhum registro encontrado.</td>
+                     </tr>
+                  )}
+               </tbody>
+            </table>
+         </div>
+      </div>
     </div>
   );
 };
