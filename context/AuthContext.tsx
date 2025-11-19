@@ -1,4 +1,6 @@
+
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { User, AuthResponse } from '../types';
 import { authService } from '../services/api';
 
@@ -11,24 +13,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const USER_KEY = 'fiber_user';
-const TOKEN_KEY = 'fiber_jwt';
+const USER_KEY = '@FiberApp:user';
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuth = () => {
       try {
-        const storedToken = localStorage.getItem(TOKEN_KEY);
         const storedUser = localStorage.getItem(USER_KEY);
-        
-        if (storedToken && storedUser) {
+        if (storedUser) {
           setUser(JSON.parse(storedUser));
         }
       } catch (e) {
-        console.error("Failed to load auth", e);
+        console.error("Erro ao restaurar sessão", e);
       } finally {
         setIsLoading(false);
       }
@@ -42,8 +42,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const data: AuthResponse = await authService.loginCpf(cpf);
       setUser(data.user);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      navigate('/'); // Redireciona para Dashboard
     } catch (error: any) {
-      console.error("SignIn Error:", error.message);
       throw error;
     } finally {
       setIsLoading(false);
@@ -53,8 +53,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signOut = () => {
     authService.logout();
     localStorage.removeItem(USER_KEY);
-    localStorage.removeItem(TOKEN_KEY);
     setUser(null);
+    navigate('/login');
   };
 
   return (
