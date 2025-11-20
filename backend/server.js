@@ -1,46 +1,45 @@
-// server.js
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 
-// ... importações
+// --- 1. IMPORTAÇÃO DAS ROTAS ---
 const instabilidadeRoutes = require("./routes/instabilidade");
-const { getInstabilities } = require("./services/downdetector"); // Para usar no Bot
+const botRoutes = require("./routes/bot");
+const speedtestRoutes = require("./routes/speedtest");
+const ontRoutes = require("./routes/ont");
 
-// ... configurações do app
+// --- 2. INICIALIZAÇÃO DO APP (CRÍTICO: Deve vir antes de qualquer app.use) ---
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-// Rotas
-app.use("/api/status", instabilidadeRoutes); // IMPORTANTE: O front busca em /api/status
+// --- 3. MIDDLEWARES ---
+app.set("trust proxy", 1); // Necessário para o Render/Rate Limit funcionar
+app.use(cors({ origin: "*" }));
+app.use(express.json());
 
-// Chatbot Atualizado (Usando o mesmo serviço)
-app.post("/api/bot", async (req, res) => {
-  try {
-    const { message, history } = req.body;
+// Rate Limit (Proteção)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: { error: "Muitas requisições." },
+});
+app.use("/api/", limiter);
 
-    // Verifica instabilidades atuais usando o serviço compartilhado
-    const currentInstabilities = await getInstabilities();
+// --- 4. DEFINIÇÃO DAS ROTAS ---
+// Health Check (Para o Render saber que o app está vivo)
+app.get("/health", (req, res) => res.json({ status: "online" }));
 
-    let contextInfo = "";
-    const foundProblem = currentInstabilities.find(
-      (p) =>
-        message.toLowerCase().includes(p.name.toLowerCase()) ||
-        message.toLowerCase().includes(p.id)
-    );
+// Rotas da Aplicação
+app.use("/api/status", instabilidadeRoutes); // Monitoramento
+app.use("/api/bot", botRoutes); // Chatbot IA
+app.use("/api/speedtest", speedtestRoutes); // Speedtest
+app.use("/api/ont", ontRoutes); // ONT / IXC
 
-    if (foundProblem) {
-      contextInfo = `[ALERTA SISTEMA]: O ${foundProblem.name} está com problemas externos reportados no Brasil. Avise o usuário que não é falha na internet.`;
-    }
+// Rota 404 (Sempre a última)
+app.use((req, res) => res.status(404).json({ error: "Rota não encontrada." }));
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const chat = model.startChat({
-      history:
-        history?.map((h) => ({
-          role: h.role === "user" ? "user" : "model",
-          parts: [{ text: h.content }],
-        })) || [],
-      systemInstruction: `Você é o FiberBot. ${contextInfo} Responda de forma curta e prestativa.`,
-    });
-
-    const result = await chat.sendMessage(message);
-    res.json({ reply: result.response.text() });
-  } catch (error) {
-    res.status(500).json({ reply: "Erro ao processar IA." });
-  }
+// --- 5. INICIALIZAÇÃO DO SERVIDOR ---
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
