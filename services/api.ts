@@ -1,100 +1,88 @@
+import axios from "axios";
+import { API_CONFIG } from "../constants/config";
 
-import axios from 'axios';
-import { AuthResponse, Invoice, SpeedTestResult, OntData, NewsItem } from '../types';
-import { API_CONFIG } from '../constants/config';
+const TOKEN_KEY = "@FiberApp:jwt";
 
-const TOKEN_KEY = '@FiberApp:jwt';
-
+// Adaptador simples para localStorage
 const storage = {
-    getItem: (key: string) => localStorage.getItem(key),
-    setItem: (key: string, val: string) => localStorage.setItem(key, val),
-    removeItem: (key: string) => localStorage.removeItem(key)
+  getItem: (key: string) => localStorage.getItem(key),
+  setItem: (key: string, val: string) => localStorage.setItem(key, val),
+  removeItem: (key: string) => localStorage.removeItem(key),
 };
 
 export const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  },
-  timeout: 30000, // 30 segundos conforme solicitado
+  headers: { "Content-Type": "application/json" },
+  timeout: 30000,
 });
 
-// Interceptor para injetar o Token
+// Interceptor: Injeta o Token
 api.interceptors.request.use(
   (config) => {
     const token = storage.getItem(TOKEN_KEY);
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Interceptor de Resposta para tratamento global de erros (opcional, mas recomendado)
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      // Token expirado ou inválido
-      authService.logout();
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
-export const setAuthToken = (token: string) => {
+// Funções de Token
+export const setAuthToken = (token: string) =>
   storage.setItem(TOKEN_KEY, token);
-};
+export const clearAuthToken = () => storage.removeItem(TOKEN_KEY);
 
-export const clearAuthToken = () => {
-  storage.removeItem(TOKEN_KEY);
-};
-
+// Serviços de Dados (SEM MOCK DE LOGIN)
 export const authService = {
-  loginCpf: async (cpf: string): Promise<AuthResponse> => {
-      const cleanCpf = cpf.replace(/\D/g, '');
-      const payload = { cpf: cleanCpf };
-      
-      // Chamada real à API - Sem Mocks
-      const response = await api.post(API_CONFIG.ENDPOINTS.LOGIN_CPF, payload);
-      
-      if (response.data.token) {
-          setAuthToken(response.data.token);
+  loginCpf: async (cpf: string) => {
+    try {
+      const cleanCpf = cpf.replace(/\D/g, "");
+      // Chama o backend real
+      const { data } = await api.post(API_CONFIG.ENDPOINTS.LOGIN_CPF, {
+        cpf: cleanCpf,
+      });
+
+      if (data.token) {
+        setAuthToken(data.token);
       }
-      return response.data;
+      return data;
+    } catch (error: any) {
+      console.error("Erro Login:", error);
+      // Retorna o erro real para a tela exibir
+      throw error.response?.data?.error || "Falha ao conectar ao servidor.";
+    }
   },
-  
-  logout: () => {
-    clearAuthToken();
-  }
+
+  logout: () => clearAuthToken(),
 };
 
 export const dataService = {
-  getInvoices: async (): Promise<Invoice[]> => {
-    const response = await api.get(API_CONFIG.ENDPOINTS.INVOICES);
-    return Array.isArray(response.data) ? response.data : [];
+  getInvoices: async () => {
+    try {
+      return (await api.get(API_CONFIG.ENDPOINTS.INVOICES)).data;
+    } catch (e) {
+      return [];
+    }
   },
-
-  getOntStatus: async (): Promise<OntData> => {
-    const response = await api.get(API_CONFIG.ENDPOINTS.ONT);
-    return response.data;
+  getOntStatus: async () => {
+    try {
+      return (await api.get(`${API_CONFIG.ENDPOINTS.ONT}/status`)).data;
+    } catch (e) {
+      return { status: "Offline", signal: "N/A" };
+    }
   },
-  
-  getNews: async (): Promise<NewsItem[]> => {
-    const response = await api.get(API_CONFIG.ENDPOINTS.NEWS);
-    return Array.isArray(response.data) ? response.data : [];
+  getNews: async () => {
+    try {
+      return (await api.get(API_CONFIG.ENDPOINTS.NEWS)).data;
+    } catch (e) {
+      return [];
+    }
   },
-  
-  runSpeedTest: async (): Promise<SpeedTestResult> => {
-    const response = await api.get(API_CONFIG.ENDPOINTS.SPEEDTEST);
-    return response.data;
+  runSpeedTest: async () => {
+    return (await api.get(API_CONFIG.ENDPOINTS.SPEEDTEST)).data;
   },
-
-  sendMessageToBot: async (message: string): Promise<string> => {
-    const response = await api.post(API_CONFIG.ENDPOINTS.BOT, { message });
-    return response.data.reply;
-  }
+  sendMessageToBot: async (message: string) => {
+    return (await api.post(API_CONFIG.ENDPOINTS.BOT, { message })).data.reply;
+  },
 };
