@@ -24,7 +24,7 @@ export const News: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -32,24 +32,23 @@ export const News: React.FC = () => {
   return (
     <div className="space-y-6 p-6 pb-24 animate-fade-in">
       <div className="flex items-center space-x-3 mb-2">
-        <div className="bg-green-500/10 p-2.5 rounded-xl border border-green-500/20">
-          <Newspaper className="text-green-500 w-6 h-6" />
+        <div className="bg-purple-500/10 p-2.5 rounded-xl border border-purple-500/20">
+          <Newspaper className="text-purple-500 w-6 h-6" />
         </div>
         <div>
-            <h2 className="text-xl font-bold text-white leading-none">Notícias</h2>
-            <p className="text-zinc-500 text-xs mt-1">Atualizações e comunicados</p>
+            <h2 className="text-xl font-bold text-white leading-none">Notícias e Comunicados</h2>
+            <p className="text-zinc-500 text-xs mt-1">Fique por dentro das últimas atualizações</p>
         </div>
       </div>
 
       <div className="space-y-4">
         {news.map((item, index) => {
-          // Lógica de Relevância: Primeiro item + Palavras-chave críticas
-          const isUrgent = index === 0 && (
+          // Lógica de Relevância: Palavras-chave críticas em qualquer notícia
+          const isUrgent = (
             item.title.toLowerCase().includes('manutenção') ||
             item.title.toLowerCase().includes('aviso') ||
             item.title.toLowerCase().includes('instabilidade') ||
-            item.title.toLowerCase().includes('queda') ||
-            item.source.name === 'Aviso'
+            item.title.toLowerCase().includes('queda')
           );
 
           return (
@@ -70,7 +69,6 @@ export const News: React.FC = () => {
                  />
                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/20 to-transparent"></div>
                  
-                 {/* Selo de Importante (Destaque solicitado) */}
                  {isUrgent && (
                    <div className="absolute top-3 right-3 z-20 animate-pulse">
                      <div className="bg-red-600 text-white text-[10px] font-extrabold px-3 py-1.5 rounded-full flex items-center shadow-[0_0_15px_rgba(220,38,38,0.6)] border border-white/10">
@@ -98,11 +96,18 @@ export const News: React.FC = () => {
               
               {/* Conteúdo */}
               <div className="p-5 flex flex-col flex-1">
-                <h3 className={`text-lg font-bold mb-2 leading-tight ${
-                  isUrgent ? 'text-white' : 'text-zinc-100'
-                }`}>
-                  {item.title}
-                </h3>
+                <div className="flex items-center gap-2 mb-2">
+                    <h3 className={`text-lg font-bold leading-tight ${
+                      isUrgent ? 'text-white' : 'text-zinc-100'
+                    }`}>
+                      {item.title}
+                    </h3>
+                    {isUrgent && (
+                        <span className="bg-red-500/10 text-red-500 text-[9px] font-bold px-2 py-0.5 rounded-md uppercase border border-red-500/20 flex-shrink-0">
+                          Urgente
+                        </span>
+                    )}
+                </div>
                 
                 <p className="text-zinc-400 text-sm mb-5 line-clamp-3 flex-1 leading-relaxed">
                   {item.description}
@@ -127,7 +132,7 @@ export const News: React.FC = () => {
         })}
       </div>
       
-      {news.length === 0 && (
+      {news.length === 0 && !isLoading && (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-500 opacity-50">
             <Newspaper size={48} strokeWidth={1} className="mb-4" />
             <p>Nenhuma notícia no momento.</p>
