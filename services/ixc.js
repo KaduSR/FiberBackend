@@ -1,13 +1,12 @@
-// AplicativoFIber/services/ixc.js
 const axios = require("axios");
 const { Buffer } = require("node:buffer");
-const md5 = require("md5"); // Biblioteca para hashing MD5
+const md5 = require("md5");
 
 class IXCService {
   constructor() {
     this.apiUrl =
       process.env.IXC_API_URL || "https://SEU_DOMINIO/webservice/v1";
-    this.adminToken = process.env.IXC_ADMIN_TOKEN;
+    this.adminToken = process.env.IXC_TOKEN; // Usando IXC_TOKEN conforme .env.example
 
     // Geração do token Basic (Base64) a partir do token administrativo
     const tokenBase64 = this.adminToken
@@ -37,40 +36,19 @@ class IXCService {
     }
   }
 
-  // Método base para postar ações (POST/CREATE/UPDATE/DELETE)
-  async post(endpoint, data, actionHeader = "") {
-    try {
-      const headers = {};
-      if (actionHeader) {
-        headers.ixcsoft = actionHeader;
-      }
-      const response = await this.api.post(endpoint, data, { headers });
-      return response.data;
-    } catch (error) {
-      console.error(
-        `[IXC] Erro ao postar ${endpoint} (${actionHeader || "post"}):`,
-        error.message
-      );
-      // Re-lança o erro para ser tratado no Controller
-      throw error;
-    }
-  }
-
   // =========================================================
-  // 🔑 AUTENTICAÇÃO
+  // 🔑 BUSCAS PARA AUTENTICAÇÃO E DADOS BASE
   // =========================================================
 
   /**
-   * 1. Busca Cliente (para Autenticação)
-   * @desc Usa Email ou CPF/CNPJ para buscar o cliente e validar a senha.
+   * 1. Busca Cliente por Login (Email, CPF ou CNPJ) para autenticação.
    */
   async findClienteByLogin(login) {
-    // Lógica para determinar se o login é um documento ou email
     const apenasNumeros = login.replace(/\D/g, "");
     const isCpf = /^\d{11}$|^\d{14}$/.test(apenasNumeros);
 
     let campoBusca = isCpf ? "cliente.cnpj_cpf" : "cliente.hotsite_email";
-    let valorBusca = isCpf ? apenasNumeros : login; // Sem formatação se for documento
+    let valorBusca = isCpf ? apenasNumeros : login;
 
     const payload = {
       qtype: campoBusca,
@@ -80,13 +58,14 @@ class IXCService {
       rp: "1",
       sortname: "cliente.id",
       sortorder: "desc",
+      campos:
+        "cliente.id, cliente.nome, cliente.hotsite_email, cliente.cnpj_cpf, cliente.hotsite_senha, cliente.status_hot",
     };
 
     let resultado = await this.list("/cliente", payload);
 
-    // Se a busca falhar com número, tenta buscar documentos formatados no IXC (opcional)
+    // Tentativa de busca de documento formatado (melhora compatibilidade)
     if (isCpf && resultado.total === 0) {
-      // Tentativa de buscar o cliente caso o IXC precise do documento formatado
       const docFormatado =
         apenasNumeros.length === 11
           ? apenasNumeros.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
@@ -102,53 +81,8 @@ class IXCService {
     return resultado.total > 0 ? resultado.registros[0] : null;
   }
 
-  async login(login, senha) {
-    const cliente = await this.findClienteByLogin(login);
-
-    if (!cliente) {
-      return null; // Cliente não encontrado
-    }
-
-    // A senha do hotsite no IXC é armazenada em MD5
-    const senhaHashed = md5(senha);
-
-    if (cliente.hotsite_senha === senhaHashed) {
-      return {
-        id: cliente.id,
-        nome: cliente.nome,
-        email: cliente.hotsite_email,
-        cpf_cnpj: cliente.cnpj_cpf,
-      };
-    }
-
-    return null; // Senha incorreta
-  }
-
-  // =========================================================
-  // 📚 DADOS DO CLIENTE (Após Autenticação)
-  // =========================================================
-
   /**
-   * 2. Busca Dados Cadastrais do Cliente
-   */
-  async getCliente(clienteId) {
-    const payload = {
-      qtype: "cliente.id",
-      query: clienteId,
-      oper: "=",
-      page: "1",
-      rp: "1",
-      // Solicita campos detalhados do cadastro (baseado em cliente.php)
-      campos:
-        "cliente.nome, cliente.fantasia, cliente.cnpj_cpf, cliente.email, cliente.celular, cliente.cep, cliente.endereco, cliente.numero, cliente.complemento, cliente.bairro, cliente.cidade, cliente.estado, cliente.status_hot",
-    };
-
-    const resultado = await this.list("/cliente", payload);
-    return resultado.registros[0] || null;
-  }
-
-  /**
-   * 3. Busca Contrato (o mais recente)
+   * 2. Busca Contrato (o mais recente/ativo). Baseado em cliente_contrato.php.
    */
   async getContrato(clienteId) {
     const payload = {
@@ -157,9 +91,8 @@ class IXCService {
       oper: "=",
       page: "1",
       rp: "1",
-      sortname: "cliente_contrato.data_ativacao", // Pega o mais recente
+      sortname: "cliente_contrato.data_ativacao",
       sortorder: "desc",
-      // Campos essenciais
       campos:
         "cliente_contrato.id, cliente_contrato.contrato, cliente_contrato.data_ativacao, cliente_contrato.data_cancelamento, cliente_contrato.status, vd_contrato_plano_c.plano_venda, cliente_contrato.data_venc_contrato, cliente_contrato.descricao_aux_plano_venda",
     };
@@ -169,8 +102,7 @@ class IXCService {
   }
 
   /**
-   * 4. Busca Dados de Conexão (radusuarios)
-   * @desc Usado para pegar o login PPPoE/Radius.
+   * 3. Busca Dados de Conexão (radusuarios). Baseado em radusuarios.php.
    */
   async getDadosConexao(clienteId) {
     const payload = {
@@ -181,9 +113,8 @@ class IXCService {
       rp: "1",
       sortname: "radusuarios.id",
       sortorder: "desc",
-      // Campos essenciais
       campos:
-        "radusuarios.id, radusuarios.login, radusuarios.tipo_conexao, radusuarios.ativo, radusuarios.online, radusuarios.id_contrato, radusuarios.contrato_plano_venda_",
+        "radusuarios.id, radusuarios.login, radusuarios.tipo_conexao, radusuarios.ativo, radusuarios.online, radusuarios.contrato_plano_venda_",
     };
 
     const resultado = await this.list("/radusuarios", payload);
@@ -191,8 +122,7 @@ class IXCService {
   }
 
   /**
-   * 5. Busca Faturas (fn_areceber)
-   * @desc Inclui campos para linha digitável, link de gateway e Pix (como solicitado).
+   * 4. Busca Faturas (fn_areceber). Inclui Pix, QR Code e Código de Barras.
    */
   async getFaturas(clienteId) {
     const payload = {
@@ -200,21 +130,61 @@ class IXCService {
       query: clienteId,
       oper: "=",
       page: "1",
-      rp: "10", // Limita a 10 faturas
+      rp: "10",
       sortname: "fn_areceber.data_vencimento",
       sortorder: "desc",
+      // CAMPOS ESSENCIAIS PARA BOLETO/PIX (baseado em fn_areceber.php)
       campos:
         "fn_areceber.id," +
         "fn_areceber.valor," +
         "fn_areceber.status," +
         "fn_areceber.data_vencimento," +
-        "fn_areceber.linha_digitavel," + // Código de Barras
-        "fn_areceber.gateway_link," + // Link do Gateway (pode ser o link do boleto ou QR Code)
-        "fn_areceber.pix_txid", // TXID do Pix
+        "fn_areceber.linha_digitavel," + // Código de Barras / Linha Digitável
+        "fn_areceber.gateway_link," + // Link do Boleto/QR Code (Se disponível)
+        "fn_areceber.pix_txid," +
+        "fn_areceber.documento",
     };
 
     const resultado = await this.list("/fn_areceber", payload);
     return resultado.registros || [];
+  }
+
+  /**
+   * 5. Busca Boleto PDF (Base64)
+   */
+  async getBoleto(boletoId) {
+    const payload = {
+      boletos: boletoId,
+      atualiza_boleto: "S",
+      tipo_boleto: "arquivo",
+      base64: "S",
+    };
+    return this.post("/get_boleto", payload);
+  }
+
+  // =========================================================
+  // 🔑 FUNÇÃO PRINCIPAL DE LOGIN (Autenticação e Permissão)
+  // =========================================================
+  async authenticate(login, senha) {
+    const cliente = await this.findClienteByLogin(login);
+
+    if (!cliente) {
+      return null;
+    }
+
+    const senhaHashed = md5(senha);
+
+    if (cliente.hotsite_senha === senhaHashed) {
+      return {
+        id: cliente.id,
+        nome: cliente.nome,
+        email: cliente.hotsite_email,
+        cpf_cnpj: cliente.cnpj_cpf,
+        status_hotsite: cliente.status_hot,
+      };
+    }
+
+    return null;
   }
 }
 
