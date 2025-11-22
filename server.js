@@ -1,4 +1,4 @@
-// app.js (Arquivo que você forneceu - Versão ATUALIZADA)
+// app.js (Arquivo Corrigido)
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -9,44 +9,36 @@ const GenieACSService = require("./services/genieacs");
 const speedtestRoute = require("./routes/speedtest");
 const instabilidadeRoutes = require("./routes/instabilidade");
 const ontRoutes = require("./routes/ont");
-const authRoutes = require("./routes/auth"); // <-- NOVO: Importação das rotas de Autenticação
+const authRoutes = require("./routes/auth");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ... (Restante das configurações e GenieACS) ...
+const genieacs = new GenieACSService(
+  process.env.GENIEACS_URL,
+  process.env.GENIEACS_USER,
+  process.env.GENIEACS_PASSWORD
+);
+
+app.set("genieacs", genieacs);
+app.set("trust proxy", 1);
 
 app.use(cors({ origin: "*" }));
 
-// Aumentei o limite global de JSON para receber dados do login
-app.use(express.json({ limit: "700mb" }));
-app.use(express.static("public"));
-
-// Configuração Específica para Speedtest (mantido)
-app.use(
-  "/api/speedtest",
-  express.raw({ limit: "700mb", type: "application/octet-stream" }),
-  express.urlencoded({ extended: true, limit: "700mb" })
-);
-
-// ... (Configuração do Rate Limiter) ...
-
-app.use("/api/", limiter);
-
-// --- ROTA DE IDENTIFICAÇÃO DO CLIENTE (IPV4/IPV6) ---
-// ... (código da rota /api/whoami) ...
+// ... (Restante do código de middlewares e whoami) ...
 
 app.get("/health", (req, res) =>
   res.json({ status: "online", uptime: process.uptime() })
 );
 
-// Rotas existentes
-app.use("/api/status", instabilidadeRoutes);
-app.use("/api/ont", ontRoutes);
-app.use("/api/speedtest", speedtestRoute);
+// --- CORREÇÃO APLICADA AQUI ---
+// Agora, todas as rotas são acessadas via /api/v1/
+app.use("/api/v1/status", instabilidadeRoutes);
+app.use("/api/v1/ont", ontRoutes);
+app.use("/api/v1/speedtest", speedtestRoute);
 
-// --- NOVO: ROTA DE AUTENTICAÇÃO IXC ---
-app.use("/api/auth", authRoutes); // <-- NOVO: Monta as rotas de Autenticação
+// ROTA DE AUTENTICAÇÃO IXC
+app.use("/api/v1/auth", authRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Rota não encontrada." }));
 
