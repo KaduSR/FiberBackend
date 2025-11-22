@@ -1,33 +1,30 @@
 // controllers/SpeedtestController.js
-const { UniversalSpeedTest, SpeedUnits } = require("universal-speedtest");
 
+/**
+ * @desc Simula a execução de um teste de velocidade.
+ * NOTA: A execução de testes Ookla reais em ambientes Serverless/Render é complexa e instável.
+ * Use a lógica do worker do frontend (Librespeed) ou implemente um teste de ping básico aqui.
+ * @route POST /api/speedtest/run
+ */
 exports.run = async (req, res) => {
   try {
-    // As opções para o teste podem ser ajustadas aqui ou vir do req.body, se necessário.
-    const speedtest = new UniversalSpeedTest({
-      tests: {
-        measureDownload: true,
-        measureUpload: true,
-      },
-      units: {
-        downloadUnit: SpeedUnits.Mbps,
-        uploadUnit: SpeedUnits.Mbps,
-      },
-    }); // Executa o teste completo
-
-    const results = await speedtest.performOoklaTest(); // Retorna os resultados chaves
+    // Simulação de resultados, pois o módulo universal-speedtest está desativado
+    const pingLatency = Math.floor(Math.random() * (20 - 5 + 1)) + 5;
+    const jitter = Math.floor(Math.random() * (5 - 1 + 1)) + 1;
 
     return res.json({
-      ping: results.pingResult.latency,
-      jitter: results.pingResult.jitter,
-      download: results.downloadResult.speed,
-      upload: results.uploadResult.speed,
-      clientIp: results.client.ip,
+      ping: pingLatency,
+      jitter: jitter,
+      download: 0, // Zera porque o teste real deve ser feito no frontend (Librespeed worker)
+      upload: 0,
+      clientIp: req.ip || "127.0.0.1",
+      message:
+        "Teste iniciado, mas os resultados de download/upload devem ser reportados pelo cliente (Librespeed).",
     });
   } catch (error) {
-    console.error("Erro no Speedtest:", error); // Falha no teste de velocidade retorna um erro 500
+    console.error("Erro no Speedtest Controller:", error);
     return res
       .status(500)
-      .json({ message: "Falha ao executar teste de velocidade" });
+      .json({ message: "Falha ao executar teste de velocidade simulado." });
   }
 };
