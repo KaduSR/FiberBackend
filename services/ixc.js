@@ -3,13 +3,27 @@ const axios = require("axios");
 
 class IXCService {
   constructor() {
-    // THIS is the likely problem spot (line 7)
-    const credentials = `${process.env.IXC_USER}:${process.env.IXC_PASSWORD}`;
-    this.authHeader = `Basic ${Buffer.from(credentials).toString("base64")}`; // If IXC_USER or IXC_PASSWORD is undefined, this fails.
+    // 1. Defina o cabeçalho usando o Token de Administrador
+    const adminToken = process.env.IXC_ADMIN_TOKEN;
+    const baseURL = process.env.IXC_API_URL;
+
+    // Verificação de segurança (Opcional, mas Recomendada)
+    if (!adminToken || !baseURL) {
+      // Lança um erro claro se as variáveis estiverem faltando
+      throw new Error(
+        "IXC_ADMIN_TOKEN or IXC_API_URL environment variables are missing."
+      );
+    }
+
+    // 2. Formate o cabeçalho para autenticação por Token
+    // Formato de autenticação comum para Tokens: 'Authorization: Token <valor_do_token>'
+    this.authHeader = `Token ${adminToken}`;
+
     this.api = axios.create({
-      baseURL: process.env.IXC_BASE_URL,
+      baseURL: baseURL,
       headers: {
-        Authorization: this.authHeader,
+        Authorization: this.authHeader, // Agora usa o Token
+        "Content-Type": "application/json",
       },
     });
   }
@@ -17,4 +31,4 @@ class IXCService {
   // ... other methods
 }
 
-module.exports = new IXCService(); // Or similar export
+module.exports = new IXCService();
