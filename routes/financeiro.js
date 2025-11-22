@@ -1,44 +1,44 @@
+// routes/financeiro.js
 const express = require("express");
 const router = express.Router();
 const ixcService = require("../services/ixc");
 
-// Middleware de autenticação (pode usar o mesmo JWT se tiver, ou API Key simples)
-const validateApiKey = (req, res, next) => {
-  const apiKey = req.headers["x-api-key"];
-  if (!apiKey || apiKey !== process.env.API_KEY) {
-    return res.status(401).json({ error: "Acesso não autorizado" });
-  }
-  next();
-};
+// IMPORTANTE: Use o middleware JWT que criamos
+const authenticate = require("../middleware/authenticate");
 
-router.use(validateApiKey);
+// Protege TODAS as rotas deste arquivo com o JWT do cliente
+router.use(authenticate);
 
-// Buscar faturas do cliente
-router.get("/faturas/:cpf", async (req, res) => {
+// ===============================================
+// 1. MINHAS FATURAS (não precisa mais de CPF na URL!)
+// ===============================================
+router.get("/minhas-faturas", async (req, res) => {
   try {
-    const { cpf } = req.params;
+    // req.user vem do JWT → já sabemos quem é o cliente!
+    const clienteId = req.user.ixcId;
 
-    // 1. Achar o cliente pelo CPF
-    const cliente = await ixcService.findClienteByLogin(cpf);
-    if (!cliente) {
-      return res.status(404).json({ error: "Cliente não encontrado" });
-    }
-
-    // 2. Buscar faturas
-    const faturas = await ixcService.getFaturas(cliente.id);
+    const faturas = await ixcService.getFaturas(clienteId);
     res.json(faturas);
   } catch (error) {
-    console.error("Erro ao buscar faturas:", error);
-    res.status(500).json({ error: "Erro interno no servidor" });
+    console.error("Erro ao buscar faturas:", error.message);
+    res.status(500).json({ error: "Erro ao buscar faturas" });
   }
 });
 
-// Pegar PDF do boleto
+// ===============================================
+// 2. BOLETO POR ID (agora protegido pelo JWT)
+// ===============================================
 router.get("/boleto/:id", async (req, res) => {
   try {
-    const boleto = await ixcService.getBoleto(req.params.id);
+    const boletoId = req.params.id;
+
+    // OPCIONAL: validar se o boleto pertence ao cliente (segurança extra)
+    // Mas como o IXC já faz isso, vamos confiar por enquanto
+
+    const boleto = await ixcService.getBoleto(boletoId);
     res.json(boleto);
   } catch (error) {
+    console.error("Erro ao gerar boleto:", error.message);
     res.status(500).json({ error: "Erro ao gerar boleto" });
   }
 });

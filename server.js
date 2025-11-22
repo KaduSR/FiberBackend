@@ -11,6 +11,8 @@ const instabilidadeRoutes = require("./routes/instabilidade");
 const ontRoutes = require("./routes/ont");
 const authRoutes = require("./routes/auth");
 const { startScheduler } = require("./cron/statusScheduler");
+const authenticate = require("./middleware/authenticate");
+const dashboardRoutes = require("./routes/dashboard");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,11 +34,11 @@ app.get("/health", (req, res) =>
   res.json({ status: "online", uptime: process.uptime() })
 );
 
-app.use("/api/v1/status", instabilidadeRoutes);
-app.use("/api/v1/faturas", authenticate, faturasRoutes);
+app.use("/api/v1/status", authenticate, instabilidadeRoutes);
 app.use("/api/v1/ont", authenticate, ontRoutes);
-app.use("/api/v1/speedtest", speedtestRoute); // <-- Montagem Corrigida
-app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/speedtest", authenticate, speedtestRoute);
+app.use("/api/v1/faturas", authenticate, financeiroRoutes);
+app.use("/api/v1/dashboard", dashboardRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Rota não encontrada." }));
 
