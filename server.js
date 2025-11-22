@@ -10,6 +10,7 @@ const speedtestRoute = require("./routes/speedtest");
 const instabilidadeRoutes = require("./routes/instabilidade");
 const ontRoutes = require("./routes/ont");
 const authRoutes = require("./routes/auth");
+const { startScheduler } = require("./cron/statusScheduler");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -40,4 +41,5 @@ app.use((req, res) => res.status(404).json({ error: "Rota não encontrada." }));
 
 app.listen(PORT, () => {
   console.log(`🚀 Backend FiberNet rodando na porta ${PORT}`);
+  startScheduler();
 });
